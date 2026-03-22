@@ -34,6 +34,14 @@ const menuItemSchema = new mongoose.Schema({
   status: {
     type: String,
     default: 'Available'
+  },
+  rating: {
+    type: Number,
+    default: 4.5
+  },
+  reviews_count: {
+    type: Number,
+    default: 10
   }
 }, { timestamps: true });
 

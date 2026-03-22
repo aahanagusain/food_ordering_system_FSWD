@@ -32,7 +32,35 @@ export function registerCustomer(data) {
   return apiCall('/customers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...data, password: data.password || 'password123' })
+  });
+}
+
+export function loginCustomer(email, password) {
+  return apiCall('/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+}
+
+export function fetchReviews(id) {
+  return apiCall(`/menu/${id}/reviews`);
+}
+
+export function addReview(id, data) {
+  return apiCall(`/menu/${id}/reviews`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
+  });
+}
+
+export function updateOrderStatus(orderId, status) {
+  return apiCall(`/orders/${orderId}/status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status })
   });
 }
 

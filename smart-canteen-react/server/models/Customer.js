@@ -24,6 +24,10 @@ const customerSchema = new mongoose.Schema({
     type: String,
     enum: ['Student', 'Staff', 'Guest'],
     default: 'Guest'
+  },
+  password: {
+    type: String,
+    default: 'password123'
   }
 }, { timestamps: true });
 

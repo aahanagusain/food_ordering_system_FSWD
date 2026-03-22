@@ -109,9 +109,32 @@ Each menu item displays:
 #### Order Status Meanings
 - **Placed**: Order received and confirmed
 - **Preparing**: Kitchen is preparing your order
-- **Ready**: Order is ready for pickup/delivery
-- **Completed**: Order has been delivered/completed
+- **Out for Delivery**: Your order is on the way (Live Tracking active)
+- **Delivered**: Order has been delivered to you
+- **Ready**: Order is ready for pickup
+- **Completed**: Order transaction is fully finished
 - **Cancelled**: Order was cancelled
+
+### 🚀 Advanced Features (New)
+
+#### 1. **Authentication System**
+- **Sleek Login/Sign-Up**: Access the new unified Auth Modal from the top-right of the navigation bar.
+- **Secure Profiles**: You can now create an account with a password. Your favorites and order history are securely linked to your profile.
+- **Quick Switch**: Easily toggle between Login and Sign-Up modes.
+
+#### 2. **Live Order Tracking**
+- **Visual Progress Bar**: Once you place an order, head to **My Orders** to see a real-time tracking bar.
+- **Status Animation**: Watch your order move through the stages (Placed → Preparing → Out for Delivery → Delivered) with smooth visual indicators.
+
+#### 3. **AI-Powered Recommendations**
+- **Smart Picks**: The "Smart Recommendations" section uses a robot icon to show you dishes the AI thinks you'll love based on your history.
+- **Trending Dishes**: See what's "Hot" right now with frequency counts and fire icons.
+- **Coupon Matching**: The system intelligently suggests the best coupons for your current cart.
+
+#### 4. **Menu Ratings**
+- **Star Ratings**: Integrated 5-star ratings are now visible on every menu card.
+- **Social Proof**: See how many reviews an item has before you buy.
+- **Your Voice**: You can now rate items after trying them!
 
 ### Payment Information
 

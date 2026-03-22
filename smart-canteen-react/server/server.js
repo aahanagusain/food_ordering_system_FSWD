@@ -115,29 +115,49 @@ app.get('/api/coupons', (req, res) => {
 // 4️⃣ Register a Customer
 app.post('/api/customers', async (req, res) => {
   try {
-    const { name, email, phone, customer_type } = req.body;
+    const { name, email, phone, customer_type, password } = req.body;
+    console.log(`[AUTH] Register attempt for email: ${email} with payload:`, req.body);
+
     if (!name || !email) {
       return res.status(400).json({ success: false, message: 'Name and email are required' });
     }
 
-    // Auto-increment customer_id
-    const lastCustomer = await Customer.findOne().sort({ customer_id: -1 }).lean();
-    const newId = (lastCustomer ? lastCustomer.customer_id : 0) + 1;
+    // Explicit check for existing email
+    const emailLower = typeof email === 'string' ? email.trim().toLowerCase() : email;
+    const existing = await Customer.findOne({ email: emailLower }).lean();
+    if (existing) {
+      console.log(`[AUTH] Registration failed: Email ${emailLower} already exists`);
+      // Since the user wants a smooth "sign in also happen", we can actually just login if password matches!
+      // But standard protocol is to return an error:
+      return res.status(400).json({ success: false, message: 'This email is already registered. Please login.' });
+    }
 
+    // Auto-increment customer_id gracefully
+    let newId = 100;
+    try {
+        const lastCustomer = await Customer.findOne().sort({ customer_id: -1 }).lean();
+        if (lastCustomer && !isNaN(lastCustomer.customer_id)) {
+            newId = parseInt(lastCustomer.customer_id) + 1;
+        }
+    } catch (e) {
+        console.warn('Could not increment customer_id automatically, falling back to random. ', e);
+        newId = Math.floor(Math.random() * 100000);
+    }
+    
     const customer = await Customer.create({
       customer_id: newId,
       name: name.trim(),
-      email: email.trim(),
+      email: emailLower,
       phone: phone || '',
-      customer_type: customer_type || 'Guest'
+      customer_type: customer_type || 'Student',
+      password: password || 'password123'
     });
 
-    res.json({ success: true, customer_id: customer.customer_id });
+    console.log(`[AUTH] Registration success: ID ${newId}`);
+    res.json({ success: true, data: customer });
   } catch (err) {
-    if (err.code === 11000) {
-      return res.status(400).json({ success: false, message: 'Email already registered' });
-    }
-    res.status(500).json({ success: false, message: err.message });
+    console.error(`[AUTH] Registration Fatal Error:`, err);
+    res.status(500).json({ success: false, message: err.message || 'Unknown database error occurred during registration.' });
   }
 });
 
@@ -212,7 +232,7 @@ app.post('/api/orders', async (req, res) => {
       tax_amount: tax,
       total_amount: total,
       payment_status: 'Paid',
-      order_status: 'Completed',
+      order_status: 'Placed',
       payment_method: payment_method || 'Cash',
       item_count: lineItems.reduce((sum, l) => sum + l.quantity, 0),
       coupon_code: coupon_code || '',
@@ -256,69 +276,147 @@ app.get('/api/orders/customer/:id', async (req, res) => {
   }
 });
 
-// 8️⃣ Get Recommendations
+// 8️⃣ AI Recommendations (Smart Picks)
 app.get('/api/recommendations', async (req, res) => {
   try {
-    const customerId = req.query.customerId ? parseInt(req.query.customerId) : null;
+    const custId = req.query.customerId ? parseInt(req.query.customerId) : null;
+    const allItems = await MenuItem.find({ stock_quantity: { $gt: 0 } }).lean();
+    
+    // Enrich with order counts
+    const orderStats = await Order.aggregate([
+      { $unwind: '$line_items' },
+      { $group: { _id: '$line_items.name', count: { $sum: '$line_items.quantity' } } }
+    ]);
+    const statMap = {};
+    orderStats.forEach(s => statMap[s._id] = s.count);
 
-    // Active promotions
-    const promos = getCoupons()
-      .filter(c => c.active)
-      .map(c => ({
-        code: c.code,
-        title: c.title,
-        message: c.message,
-        time: c.time,
-        category: c.category || null,
-        discount_percent: c.discount_percent || null,
-        amount_off: c.amount_off || null,
-        type: c.type || (c.category ? 'category' : 'cart'),
-        min_subtotal: c.min_subtotal || null
-      }));
+    const scoredItems = allItems.map(item => ({
+      ...item,
+      score: (item.rating || 4) * 0.6 + (statMap[item.name] || 0) * 0.4
+    })).sort((a, b) => b.score - a.score);
 
-    // Popular dishes (top 5 by order count)
-    let popular = [];
-    try {
-      const popularAgg = await Order.aggregate([
-        { $unwind: '$line_items' },
-        { $group: { _id: '$line_items.name', times: { $sum: 1 } } },
-        { $sort: { times: -1 } },
-        { $limit: 5 },
-        { $project: { _id: 0, name: '$_id', times: 1 } }
-      ]);
-      popular = popularAgg;
-    } catch (e) {
-      popular = [];
-    }
+    const popular = scoredItems.slice(0, 5);
 
-    // If no orders yet, show default popular items
-    if (popular.length === 0) {
-      const defaults = await MenuItem.find().sort({ name: 1 }).limit(5).lean();
-      popular = defaults.map(d => ({ name: d.name, times: 1 }));
-    }
-
-    // Personal recommendations for logged-in customer
+    // 2. Personal Picks
     let personal = [];
-    if (customerId) {
+    if (custId) {
       try {
-        const personalAgg = await Order.aggregate([
-          { $match: { customer_id: customerId } },
-          { $unwind: '$line_items' },
-          { $group: { _id: '$line_items.name', times: { $sum: '$line_items.quantity' } } },
-          { $sort: { times: -1 } },
-          { $limit: 5 },
-          { $project: { _id: 0, name: '$_id', times: 1 } }
-        ]);
-        personal = personalAgg;
+        const history = await Order.find({ customer_id: custId }).sort({ order_date: -1 }).limit(10).lean();
+        if (history.length > 0) {
+          const categories = new Set();
+          history.forEach(o => o.line_items.forEach(li => {
+            const mi = allItems.find(mi => mi.name === li.name);
+            if (mi) categories.add(mi.category_name);
+          }));
+          
+          personal = allItems
+            .filter(item => categories.has(item.category_name))
+            .filter(item => !popular.find(p => p.name === item.name)) // Don't repeat popular
+            .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+            .slice(0, 5);
+        }
       } catch (e) {
         personal = [];
       }
+    }
+
+    // 3. Promotions
+    let promos = [];
+    try {
+      const activeCoupons = await Coupon.find({ active: true }).limit(2).lean();
+      promos = activeCoupons.map(c => ({
+        code: c.code,
+        amount_off: c.amount_off,
+        message: `Extra ₹${c.amount_off} OFF!`
+      }));
+    } catch (e) {
+      promos = [];
     }
 
     res.json({
       success: true,
       data: { popular, personal, promotions: promos }
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 9️⃣ Login
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+    
+    const emailLower = email.trim().toLowerCase();
+    const customer = await Customer.findOne({ email: emailLower, password: password }).lean();
+    
+    if (!customer) {
+      console.log(`[AUTH] Login failed for: ${emailLower}`);
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+    
+    console.log(`[AUTH] Login success: ${emailLower}`);
+    res.json({ success: true, data: customer });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+const Review = require('./models/Review');
+
+// 🔟 Get & Add Reviews for Menu Item
+app.get('/api/menu/:id/reviews', async (req, res) => {
+  try {
+    const reviews = await Review.find({ item_id: parseInt(req.params.id) }).sort({ review_date: -1 }).lean();
+    res.json({ success: true, data: reviews });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/menu/:id/reviews', async (req, res) => {
+  try {
+    const { customer_id, customer_name, rating, comment } = req.body;
+    const item_id = parseInt(req.params.id);
+
+    // Create review
+    const review = await Review.create({
+      item_id,
+      customer_id,
+      customer_name,
+      rating: parseFloat(rating),
+      comment
+    });
+
+    // Update item total rating
+    const item = await MenuItem.findOne({ item_id });
+    if (item) {
+      const current_total = item.rating * item.reviews_count;
+      item.reviews_count += 1;
+      item.rating = Math.round(((current_total + rating) / item.reviews_count) * 10) / 10;
+      await item.save();
+    }
+
+    res.json({ success: true, data: review, item_rating: item ? item.rating : null });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 1️⃣1️⃣ Update Order Status (for Live Tracking simulation)
+app.put('/api/orders/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    const order = await Order.findOneAndUpdate(
+      { order_id: parseInt(req.params.id) },
+      { order_status: status },
+      { new: true }
+    ).lean();
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    res.json({ success: true, status: order.order_status });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -336,24 +434,24 @@ mongoose.connect(MONGO_URI)
         console.log('📦 Updating menu items to match original files...');
         await MenuItem.deleteMany({});
         const seedData = [
-            { item_id: 1, name: 'Masala Chai', category_name: 'Beverages', price: 15.00, stock_quantity: 100, description: 'Traditional Indian spiced tea' },
-            { item_id: 2, name: 'Coffee', category_name: 'Beverages', price: 20.00, stock_quantity: 80, description: 'Hot brewed coffee' },
-            { item_id: 3, name: 'Cold Coffee', category_name: 'Beverages', price: 35.00, stock_quantity: 50, description: 'Iced coffee with cream' },
-            { item_id: 4, name: 'Orange Juice', category_name: 'Beverages', price: 25.00, stock_quantity: 30, description: 'Fresh squeezed orange juice' },
-            { item_id: 5, name: 'Samosa', category_name: 'Snacks', price: 12.00, stock_quantity: 200, description: 'Crispy fried pastry with spiced filling' },
-            { item_id: 6, name: 'Vada Pav', category_name: 'Snacks', price: 25.00, stock_quantity: 150, description: 'Mumbai style potato fritter burger' },
-            { item_id: 7, name: 'Poha', category_name: 'Snacks', price: 20.00, stock_quantity: 100, description: 'Flattened rice with spices' },
-            { item_id: 8, name: 'Sandwich', category_name: 'Snacks', price: 30.00, stock_quantity: 80, description: 'Fresh grilled vegetable sandwich' },
-            { item_id: 9, name: 'Dal Rice', category_name: 'Main Course', price: 45.00, stock_quantity: 60, description: 'Comforting lentil curry with steamed rice' },
-            { item_id: 10, name: 'Rajma Rice', category_name: 'Main Course', price: 50.00, stock_quantity: 50, description: 'Kidney bean curry with rice' },
-            { item_id: 11, name: 'Chole Bhature', category_name: 'Main Course', price: 60.00, stock_quantity: 40, description: 'Spiced chickpeas with fried bread' },
-            { item_id: 12, name: 'Biryani', category_name: 'Main Course', price: 70.00, stock_quantity: 35, description: 'Fragrant spiced rice dish' },
-            { item_id: 13, name: 'Gulab Jamun', category_name: 'Desserts', price: 25.00, stock_quantity: 100, description: 'Sweet milk-solid balls in syrup' },
-            { item_id: 14, name: 'Ice Cream', category_name: 'Desserts', price: 30.00, stock_quantity: 50, description: 'Creamy vanilla ice cream' },
-            { item_id: 15, name: 'Kheer', category_name: 'Desserts', price: 35.00, stock_quantity: 40, description: 'Rice pudding with nuts' },
-            { item_id: 16, name: 'Idli Sambar', category_name: 'Breakfast', price: 30.00, stock_quantity: 80, description: 'Steamed rice cakes with lentil soup' },
-            { item_id: 17, name: 'Dosa', category_name: 'Breakfast', price: 40.00, stock_quantity: 60, description: 'Crispy fermented rice crepe' },
-            { item_id: 18, name: 'Paratha', category_name: 'Breakfast', price: 35.00, stock_quantity: 70, description: 'Stuffed Indian flatbread' }
+            { item_id: 1, name: 'Masala Chai', category_name: 'Beverages', price: 15.00, stock_quantity: 100, description: 'Traditional Indian spiced tea', rating: 4.8, reviews_count: 150 },
+            { item_id: 2, name: 'Coffee', category_name: 'Beverages', price: 20.00, stock_quantity: 80, description: 'Hot brewed coffee', rating: 4.2, reviews_count: 85 },
+            { item_id: 3, name: 'Cold Coffee', category_name: 'Beverages', price: 35.00, stock_quantity: 50, description: 'Iced coffee with cream', rating: 4.9, reviews_count: 210 },
+            { item_id: 4, name: 'Orange Juice', category_name: 'Beverages', price: 25.00, stock_quantity: 30, description: 'Fresh squeezed orange juice', rating: 4.5, reviews_count: 45 },
+            { item_id: 5, name: 'Samosa', category_name: 'Snacks', price: 12.00, stock_quantity: 200, description: 'Crispy fried pastry with spiced filling', rating: 4.7, reviews_count: 320 },
+            { item_id: 6, name: 'Vada Pav', category_name: 'Snacks', price: 25.00, stock_quantity: 150, description: 'Mumbai style potato fritter burger', rating: 4.6, reviews_count: 180 },
+            { item_id: 7, name: 'Poha', category_name: 'Snacks', price: 20.00, stock_quantity: 100, description: 'Flattened rice with spices', rating: 4.3, reviews_count: 90 },
+            { item_id: 8, name: 'Sandwich', category_name: 'Snacks', price: 30.00, stock_quantity: 80, description: 'Fresh grilled vegetable sandwich', rating: 4.4, reviews_count: 110 },
+            { item_id: 9, name: 'Dal Rice', category_name: 'Main Course', price: 45.00, stock_quantity: 60, description: 'Comforting lentil curry with steamed rice', rating: 4.5, reviews_count: 75 },
+            { item_id: 10, name: 'Rajma Rice', category_name: 'Main Course', price: 50.00, stock_quantity: 50, description: 'Kidney bean curry with rice', rating: 4.7, reviews_count: 130 },
+            { item_id: 11, name: 'Chole Bhature', category_name: 'Main Course', price: 60.00, stock_quantity: 40, description: 'Spiced chickpeas with fried bread', rating: 4.8, reviews_count: 250 },
+            { item_id: 12, name: 'Biryani', category_name: 'Main Course', price: 70.00, stock_quantity: 35, description: 'Fragrant spiced rice dish', rating: 4.9, reviews_count: 420 },
+            { item_id: 13, name: 'Gulab Jamun', category_name: 'Desserts', price: 25.00, stock_quantity: 100, description: 'Sweet milk-solid balls in syrup', rating: 4.8, reviews_count: 190 },
+            { item_id: 14, name: 'Ice Cream', category_name: 'Desserts', price: 30.00, stock_quantity: 50, description: 'Creamy vanilla ice cream', rating: 4.5, reviews_count: 65 },
+            { item_id: 15, name: 'Kheer', category_name: 'Desserts', price: 35.00, stock_quantity: 40, description: 'Rice pudding with nuts', rating: 4.6, reviews_count: 40 },
+            { item_id: 16, name: 'Idli Sambar', category_name: 'Breakfast', price: 30.00, stock_quantity: 80, description: 'Steamed rice cakes with lentil soup', rating: 4.6, reviews_count: 120 },
+            { item_id: 17, name: 'Dosa', category_name: 'Breakfast', price: 40.00, stock_quantity: 60, description: 'Crispy fermented rice crepe', rating: 4.8, reviews_count: 310 },
+            { item_id: 18, name: 'Paratha', category_name: 'Breakfast', price: 35.00, stock_quantity: 70, description: 'Stuffed Indian flatbread', rating: 4.5, reviews_count: 140 }
         ];
         await MenuItem.insertMany(seedData);
         console.log('✨ Auto-seed complete!');

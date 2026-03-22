@@ -19,14 +19,13 @@ export default function Toast({ message, type, onClose }) {
   }[type] || 'fa-info-circle text-primary';
 
   return (
-    <div className="toast-container">
-      <div className="toast show">
-        <div className="toast-header">
-          <i className={`fas ${iconClass}`}></i>
-          <strong>Notification</strong>
-          <button className="btn-close" onClick={onClose}>&times;</button>
+    <div className="toast-container-premium">
+      <div className={`toast-premium ${type}`}>
+        <div className="toast-content">
+          <i className={`fas ${iconClass} toast-icon`}></i>
+          <span className="toast-message">{message}</span>
+          <button className="toast-close-btn" onClick={onClose}>&times;</button>
         </div>
-        <div className="toast-body">{message}</div>
       </div>
     </div>
   );

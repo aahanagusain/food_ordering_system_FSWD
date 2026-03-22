@@ -36,7 +36,7 @@ const orderSchema = new mongoose.Schema({
   },
   order_status: {
     type: String,
-    default: 'Completed'
+    default: 'Placed'
   },
   payment_method: {
     type: String,

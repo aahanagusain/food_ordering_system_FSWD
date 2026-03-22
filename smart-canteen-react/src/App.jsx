@@ -8,11 +8,12 @@ import Suggestions from './components/Suggestions';
 import Menu from './components/Menu';
 import Cart from './components/Cart';
 import Orders from './components/Orders';
-import CustomerModal from './components/CustomerModal';
+import AuthModal from './components/AuthModal';
 import OrderModal from './components/OrderModal';
+import ReviewModal from './components/ReviewModal';
 import Toast from './components/Toast';
 import Loading from './components/Loading';
-import { fetchMenu, fetchCoupons, fetchRecommendations, registerCustomer, placeOrder, fetchCustomerOrders } from './utils/api';
+import { fetchMenu, fetchCoupons, fetchRecommendations, registerCustomer, loginCustomer, placeOrder, fetchCustomerOrders, updateOrderStatus } from './utils/api';
 
 const TAX_RATE = 0.05;
 
@@ -33,8 +34,15 @@ export default function App() {
   const [activeView, setActiveView] = useState('menu'); // 'menu' | 'cart' | 'orders'
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showOrderModal, setShowOrderModal] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewItem, setReviewItem] = useState(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'info' });
+
+  const handleOpenReviews = (item) => {
+    setReviewItem(item);
+    setShowReviewModal(true);
+  };
 
   // ── Show toast notification ──
   const showToast = useCallback((message, type = 'info') => {
@@ -215,26 +223,70 @@ export default function App() {
     showToast('Coupon removed', 'info');
   };
 
-  // ── Register customer ──
-  const handleRegister = async (formData) => {
-    if (!formData.name || !formData.email || !formData.customer_type) {
-      showToast('Fill all required fields', 'error');
-      return;
-    }
+  // ── Handle customer login ──
+  const handleLogin = async (email, password) => {
     setLoading(true);
-    const data = await registerCustomer(formData);
-    if (data.success) {
-      const customer = { customer_id: data.customer_id, ...formData };
-      setCurrentCustomer(customer);
-      setCurrentCustomerId(data.customer_id);
-      localStorage.setItem('currentCustomer', JSON.stringify(customer));
-      setShowCustomerModal(false);
-      showToast('Registration successful!', 'success');
-    } else {
-      showToast(data.message || 'Registration failed', 'error');
+    try {
+      const data = await loginCustomer(email, password);
+      if (data.success && data.data) {
+        setCurrentCustomer(data.data);
+        setCurrentCustomerId(data.data.customer_id);
+        localStorage.setItem('currentCustomer', JSON.stringify(data.data));
+        showToast(`Welcome back, ${data.data.name}!`, 'success');
+        setShowCustomerModal(false);
+      } else {
+        // Show specific error from backend
+        showToast(data.message || 'Login failed. Invalid credentials.', 'error');
+      }
+    } catch (err) {
+      showToast('Network error in login', 'error');
     }
     setLoading(false);
   };
+
+  // ── Handle customer registration ──
+  const handleRegister = async (customerData) => {
+    setLoading(true);
+    console.log('[DEBUG] Registration data payload:', customerData);
+    try {
+      const data = await registerCustomer(customerData);
+      console.log('[DEBUG] Registration response data:', data);
+      if (data.success && data.data) {
+        setCurrentCustomer(data.data);
+        setCurrentCustomerId(data.data.customer_id);
+        localStorage.setItem('currentCustomer', JSON.stringify(data.data));
+        showToast('Account created successfully!', 'success');
+        setShowCustomerModal(false);
+      } else {
+        // Show specific error from backend if available
+        const errorMsg = data.message || 'Error: Could not complete registration.';
+        showToast(errorMsg, 'error');
+      }
+    } catch (err) {
+      console.error('[DEBUG] Registration Network/Fetch error:', err);
+      showToast('Network error during registration', 'error');
+    }
+    setLoading(false);
+  };
+
+  // ── Simulate Tracking ──
+  const simulateOrderProgress = useCallback((orderId) => {
+    const statuses = ['Preparing', 'Out for Delivery', 'Delivered'];
+    let i = 0;
+    const interval = setInterval(async () => {
+      if (i >= statuses.length) {
+        clearInterval(interval);
+        return;
+      }
+      const data = await updateOrderStatus(orderId, statuses[i]);
+      if (data.success) {
+        // Refresh orders
+        const ordsData = await fetchCustomerOrders(currentCustomerId);
+        if (ordsData.success) setOrders(ordsData.data || []);
+      }
+      i++;
+    }, 10000); // Progress every 10 seconds
+  }, [currentCustomerId]);
 
   // ── Checkout ──
   const checkout = () => {
@@ -267,7 +319,8 @@ export default function App() {
       setShowOrderModal(false);
       setAppliedCoupon(null);
       showToast(`Order placed! ID: ${data.order_id}`, 'success');
-      setActiveView('menu');
+      setActiveView('orders'); // Jump to orders to see tracking
+      simulateOrderProgress(data.order_id);
       loadRecommendations(currentCustomerId);
       loadMenu(); // Refresh stock
     } else {
@@ -300,41 +353,75 @@ export default function App() {
     document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  if (!currentCustomer) {
+    return (
+      <div className="auth-gate-page">
+        <div className="auth-card-container">
+          <div className="text-center mb-5">
+            <div className="brand-logo mx-auto mb-3" style={{ width: '80px', height: '80px', fontSize: '2.5rem' }}>
+              <i className="fas fa-utensils"></i>
+            </div>
+            <h1 className="fw-800 text-white">Smart Food Ordering System</h1>
+            <p className="text-muted">Register or Login to start your food journey</p>
+          </div>
+          <div className="auth-form-wrapper p-4 rounded-4 shadow-lg border border-secondary bg-dark-glass">
+             <AuthModal
+              show={true}
+              isInternal={true}
+              onLogin={handleLogin}
+              onRegister={handleRegister}
+            />
+          </div>
+        </div>
+        <Loading show={loading} />
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'info' })} />
+      </div>
+    );
+  }
+
   return (
     <>
-      {/* Navbar */}
       <Navbar
         cartCount={cartCount}
-        onShowMenu={showMenu}
-        onShowCart={showCart}
-        onShowOrders={showOrders}
+        onViewChange={setActiveView}
+        activeView={activeView}
+        currentCustomer={currentCustomer}
+        onLogout={() => {
+          setCurrentCustomer(null);
+          setCurrentCustomerId(null);
+          localStorage.removeItem('currentCustomer');
+          setOrders([]);
+          showToast('Logged out successfully', 'info');
+        }}
       />
 
-      {/* Hero */}
-      <Hero onBrowseMenu={scrollToMenu} />
-
-      {/* Suggestions - always visible */}
-      <Suggestions
-        recommendations={recommendations}
-        currentCustomerId={currentCustomerId}
-        coupons={coupons}
-        onApplyCoupon={applyCoupon}
-      />
-
-      {/* Sections – show/hide based on activeView */}
       {activeView === 'menu' && (
-        <Menu menuItems={menuItems} onAddToCart={addToCart} />
+        <>
+          <Hero onOrderClick={scrollToMenu} />
+          <Suggestions
+            recommendations={recommendations}
+            currentCustomerId={currentCustomerId}
+            coupons={coupons}
+            onApplyCoupon={applyCoupon}
+          />
+          <Menu
+            items={menuItems}
+            onAddToCart={addToCart}
+            onOpenReviews={handleOpenReviews}
+          />
+        </>
       )}
-
       {activeView === 'cart' && (
         <Cart
           cart={cart}
           cartTotals={cartTotals}
-          appliedCoupon={appliedCoupon}
           onUpdateQuantity={updateQuantity}
           onRemoveFromCart={removeFromCart}
-          onRemoveCoupon={removeCoupon}
           onCheckout={checkout}
+          coupons={coupons}
+          appliedCoupon={appliedCoupon}
+          onApplyCoupon={applyCoupon}
+          onRemoveCoupon={removeCoupon}
         />
       )}
 
@@ -342,16 +429,8 @@ export default function App() {
         <Orders
           orders={orders}
           currentCustomerId={currentCustomerId}
-          onOpenRegister={() => setShowCustomerModal(true)}
         />
       )}
-
-      {/* Modals */}
-      <CustomerModal
-        show={showCustomerModal}
-        onClose={() => setShowCustomerModal(false)}
-        onRegister={handleRegister}
-      />
 
       <OrderModal
         show={showOrderModal}
@@ -360,6 +439,14 @@ export default function App() {
         cart={cart}
         cartTotals={cartTotals}
         currentCustomer={currentCustomer}
+      />
+
+      <ReviewModal
+        show={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        item={reviewItem}
+        currentUser={currentCustomer}
+        onRatingUpdate={loadMenu}
       />
 
       {/* Loading & Toast */}
