@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Canteen - Order Online</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="styles.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="fas fa-utensils"></i>Smart Canteen</a>
+            <button class="navbar-toggler" onclick="toggleNavbar()"><span></span><span></span><span></span></button>
+            <div class="navbar-nav" id="navbarNav">
+                <a class="nav-link" href="#menu" onclick="showMenu()">Menu</a>
+                <a class="nav-link" href="#cart" onclick="showCart()" id="cart-link"><i class="fas fa-shopping-cart"></i> Cart (<span id="cart-count">0</span>)</a>
+                <a class="nav-link" href="#orders" onclick="showOrders()">My Orders</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero-section">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1>Order Your Favorite Food Online</h1>
+                    <p>Skip the queue and order directly from your device. Fresh, delicious food delivered to your table.</p>
+                    <button class="btn btn-primary" onclick="scrollToMenu()"><i class="fas fa-arrow-down"></i>Browse Menu</button>
+                </div>
+                <div class="hero-image">
+                    <img src="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&h=600&fit=crop" alt="Delicious Vegetarian Food" class="hero-food-image">
+                    <div class="hero-image-glow"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="modal" id="customerModal">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5>Customer Information</h5>
+                    <button class="btn-close" onclick="closeModal('customerModal')">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="customerForm">
+                        <div class="form-group"><label for="customerName">Full Name *</label><input type="text" id="customerName" required></div>
+                        <div class="form-group"><label for="customerEmail">Email *</label><input type="email" id="customerEmail" required></div>
+                        <div class="form-group"><label for="customerPhone">Phone</label><input type="tel" id="customerPhone"></div>
+                        <div class="form-group"><label for="customerType">Customer Type *</label><select id="customerType" required><option value="">Select Type</option><option value="Student">Student</option><option value="Staff">Staff</option><option value="Guest">Guest</option></select></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeModal('customerModal')">Cancel</button>
+                    <button class="btn btn-primary" onclick="registerCustomer()">Register</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <section id="suggestions" class="py-5">
+        <div class="container">
+            <h2 class="text-center">Suggestions</h2>
+            <p class="text-center text-muted mb-4">Personal picks, crowd favourites, and current offers.</p>
+            <div class="recommendations">
+                <div class="recommendation-group">
+                    <h3>Frequently Bought</h3>
+                    <div id="personal-recommendations" class="frequently-bought-container"><input type="text" class="frequently-bought-input" placeholder="Register to see your favourites." readonly></div>
+                </div>
+                <div class="recommendation-group">
+                    <h3>Popular Dishes</h3>
+                    <ul id="popular-recommendations" class="recommendation-list"><li class="text-muted">Loading favourites...</li></ul>
+                </div>
+                <div class="recommendation-group">
+                    <h3>Current Offers</h3>
+                    <ul id="promotion-list" class="recommendation-list"><li class="text-muted">Check back later for time-based offers.</li></ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="menu" class="py-5">
+        <div class="container">
+            <h2 class="text-center">Our Menu</h2>
+            <div class="filter-buttons">
+                <button class="btn btn-outline active" onclick="filterMenu('all')">All Items</button>
+                <button class="btn btn-outline" onclick="filterMenu('Beverages')">Beverages</button>
+                <button class="btn btn-outline" onclick="filterMenu('Snacks')">Snacks</button>
+                <button class="btn btn-outline" onclick="filterMenu('Main Course')">Main Course</button>
+                <button class="btn btn-outline" onclick="filterMenu('Desserts')">Desserts</button>
+                <button class="btn btn-outline" onclick="filterMenu('Breakfast')">Breakfast</button>
+            </div>
+            <div id="menu-items" class="menu-grid"></div>
+        </div>
+    </section>
+
+    <section id="cart" class="py-5" style="display: none;">
+        <div class="container">
+            <h2 class="text-center">Your Cart</h2>
+            <div id="cart-items"></div>
+            <div class="cart-summary">
+                <div class="summary-card">
+                    <h5>Order Summary</h5>
+                    <hr>
+                    <div class="summary-row"><span>Subtotal</span><span id="cart-subtotal">₹0.00</span></div>
+                    <div class="summary-row"><span>Tax (5%)</span><span id="cart-tax">₹0.00</span></div>
+                    <hr>
+                    <div class="summary-row total"><strong>Total</strong><strong id="cart-total">₹0.00</strong></div>
+                    <button class="btn btn-primary w-100" onclick="checkout()" id="checkout-btn" disabled><i class="fas fa-credit-card"></i>Proceed to Checkout</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="orders" class="py-5" style="display: none;">
+        <div class="container">
+            <h2 class="text-center">My Orders</h2>
+            <div id="orders-list"></div>
+        </div>
+    </section>
+
+    <div class="modal" id="orderModal">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5>Order Confirmation</h5>
+                    <button class="btn-close" onclick="closeModal('orderModal')">&times;</button>
+                </div>
+                <div class="modal-body"><div id="order-details"></div></div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeModal('orderModal')">Close</button>
+                    <button class="btn btn-success" onclick="confirmOrder()">Confirm Order</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading" class="loading-spinner" style="display: none;"><div class="spinner"></div></div>
+    <div class="toast-container"><div id="toast" class="toast"><div class="toast-header"><i class="fas fa-info-circle"></i><strong>Notification</strong><button class="btn-close" onclick="closeToast()">&times;</button></div><div class="toast-body" id="toast-message"></div></div></div>
+    <script src="script.js"></script>
+</body>
+</html>

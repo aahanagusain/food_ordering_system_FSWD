@@ -1,0 +1,9 @@
+{
+  "name": "smart-canteen-system",
+  "version": "1.0.0",
+  "description": "Smart Canteen Orchestration",
+  "scripts": {
+    "dev": "npm run dev --prefix smart-canteen-react",
+    "setup": "npm install --prefix smart-canteen-react && npm install --prefix smart-canteen-react/server"
+  }
+}
