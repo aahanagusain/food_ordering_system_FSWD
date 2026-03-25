@@ -27,7 +27,7 @@ export default function Menu({ items, onAddToCart, onOpenReviews }) {
            <i className="fas fa-search search-icon-pos"></i>
            <input 
               type="text" 
-              placeholder="Search for something delicious..." 
+              placeholder="Search for your favorite dishes..." 
               className="form-control search-input-v2 shadow-sm"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

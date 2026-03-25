@@ -11,8 +11,8 @@ export default function Suggestions({ recommendations, currentCustomerId, coupon
       <div className="container">
         <div className="d-flex align-items-center justify-content-between mb-4 px-2">
            <div>
-              <h2 className="mb-1 fw-800 text-glow">Canteen AI</h2>
-              <p className="text-muted small mb-0">Smart predictions curated for you</p>
+              <h2 className="mb-1 fw-800 text-glow">Smart AI</h2>
+              <p className="text-light small mb-0" style={{ opacity: 0.85 }}>Intelligent meal recommendations powered by your taste profile</p>
            </div>
            <div className="ai-status-badge d-flex align-items-center">
               <span className="pulse-dot me-2"></span>

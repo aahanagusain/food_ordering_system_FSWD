@@ -31,7 +31,7 @@ export default function MenuCard({ item, onAddToCart, onOpenReviews }) {
         </div>
 
         <h5 className="text-white fw-800 mb-2">{item.name}</h5>
-        <p className="text-muted fs-small mb-4 line-clamp-2">{item.description || 'Prepared fresh daily with premium ingredients.'}</p>
+        <p className="text-light mb-4 line-clamp-2" style={{ fontSize: '0.9rem', opacity: 0.85 }}>{item.description || 'Prepared fresh daily with premium ingredients.'}</p>
 
         <div className="mt-auto pt-3 d-flex justify-content-between align-items-center border-top border-secondary">
           <div className="price-tag h4 text-white fw-800 mb-0">₹{parseFloat(item.price).toFixed(2)}</div>

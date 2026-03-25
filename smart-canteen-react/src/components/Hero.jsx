@@ -6,7 +6,8 @@ export default function Hero({ onOrderClick }) {
         <div className="hero-content d-flex align-items-center gap-5 pt-4">
           <div className="hero-text flex-grow-1">
             <h1 className="display-4 fw-800 text-white mb-3">Savor the Taste of <span className="text-accent-glow">Excellence</span></h1>
-            <p className="lead text-muted mb-4 fs-5">Skip the queue. Our AI-powered canteen ensures your favorite meals are ready right when you arrive.</p>
+            <h4 className="text-accent mb-4 fw-light">Seamless ordering, delightful dining.</h4>
+            <p className="lead text-light mb-4 fs-5" style={{ opacity: 0.85 }}>Skip the queue. Our AI-powered food ordering system ensures your favorite meals are ready right when you arrive.</p>
             <div className="d-flex gap-3">
               <button className="btn btn-primary rounded-pill px-5 py-3 fs-5 shadow-accent" onClick={onOrderClick}>
                  Order Now <i className="fas fa-arrow-right ms-2"></i>
